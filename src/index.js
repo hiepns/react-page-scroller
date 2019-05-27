@@ -7,6 +7,8 @@ const previousTouchMove = Symbol();
 const scrolling = Symbol();
 const wheelScroll = Symbol();
 const touchMove = Symbol();
+const touchStart = Symbol();
+const touchEnd = Symbol();
 const keyPress = Symbol();
 const onWindowResized = Symbol();
 const addNextComponent = Symbol();
@@ -23,6 +25,13 @@ const ANIMATION_TIMER = 200;
 const KEY_UP = 38;
 const KEY_DOWN = 40;
 const DISABLED_CLASS_NAME = "rps-scroll--disabled";
+
+let xDown = null;
+let yDown = null;
+let xDiff = null;
+let yDiff = null;
+let timeDown = null;
+let startEl = null;
 
 export default class ReactPageScroller extends React.Component {
     static propTypes = {
@@ -56,14 +65,12 @@ export default class ReactPageScroller extends React.Component {
 
     componentDidMount = () => {
         this[_isMounted] = true;
-        
+
         window.addEventListener('resize', this[onWindowResized]);
 
-        document.ontouchmove = (event) => {
-            event.preventDefault();
-        };
-
-        this._pageContainer.addEventListener("touchmove", this[touchMove]);
+        this._pageContainer.addEventListener("touchmove", this[touchMove], false);
+        this._pageContainer.addEventListener("touchstart", this[touchStart], false);
+        this._pageContainer.addEventListener("touchend", this[touchEnd], false);
         this._pageContainer.addEventListener("keydown", this[keyPress]);
 
         let componentsToRenderLength = 0;
@@ -79,12 +86,12 @@ export default class ReactPageScroller extends React.Component {
 
     componentWillUnmount = () => {
         this[_isMounted] = false;
-        
+
         window.removeEventListener('resize', this[onWindowResized]);
-        
-        document.ontouchmove = (e) => { return true; };
 
         this._pageContainer.removeEventListener("touchmove", this[touchMove]);
+        this._pageContainer.removeEventListener("touchstart", this[touchMove]);
+        this._pageContainer.removeEventListener("touchend", this[touchMove]);
         this._pageContainer.removeEventListener("keydown", this[keyPress]);
 
     };
@@ -194,16 +201,46 @@ export default class ReactPageScroller extends React.Component {
 
     };
 
-    [touchMove] = (event) => {
-        if (!_.isNull(this[previousTouchMove])) {
-            if (event.touches[0].clientY > this[previousTouchMove]) {
-                this[scrollWindowUp]();
-            } else {
+    [touchMove] = (e) => {
+        if (!xDown || !yDown) return;
+
+        let xUp = e.touches[0].clientX;
+        let yUp = e.touches[0].clientY;
+
+        xDiff = xDown - xUp;
+        yDiff = yDown - yUp;
+    };
+
+    [touchStart] = (e) => {
+        startEl = e.target;
+
+        timeDown = Date.now();
+        xDown = e.touches[0].clientX;
+        yDown = e.touches[0].clientY;
+        xDiff = 0;
+        yDiff = 0;
+    };
+
+    [touchEnd] = (e) => {
+        // if the user released on a different target, cancel!
+        if (startEl !== e.target) return;
+
+        let swipeThreshold =  10;    // default 10px
+        let swipeTimeout =  1000;   // default 1000ms
+        let timeDiff = Date.now() - timeDown;
+
+        if ((Math.abs(xDiff) <= Math.abs(yDiff)) && (Math.abs(yDiff) > swipeThreshold) && timeDiff < swipeTimeout) {
+            if (yDiff > 0) {
                 this[scrollWindowDown]();
+            } else {
+                this[scrollWindowUp]();
             }
-        } else {
-            this[previousTouchMove] = event.touches[0].clientY;
         }
+
+        // reset values
+        xDown = null;
+        yDown = null;
+        timeDown = null;
     };
 
     [keyPress] = (event) => {
